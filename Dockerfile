@@ -1,40 +1,31 @@
-# DOCKER-VERSION 0.4.0
+FROM ubuntu:14.04
 
-from	ubuntu:12.04
-run	echo 'deb http://us.archive.ubuntu.com/ubuntu/ precise universe' >> /etc/apt/sources.list
-run	apt-get -y update
+RUN apt-get -y install wget
+RUN wget -O /etc/apt/sources.list http://apt-get.eu/trusty/sources.list && apt-get -y update
 
-# Install required packages
-run	apt-get -y install python-ldap python-cairo python-django python-twisted python-django-tagging python-simplejson python-memcache python-pysqlite2 python-support python-pip gunicorn supervisor nginx-light
-run	pip install whisper
-run	pip install --install-option="--prefix=/var/lib/graphite" --install-option="--install-lib=/var/lib/graphite/lib" carbon
-run	pip install --install-option="--prefix=/var/lib/graphite" --install-option="--install-lib=/var/lib/graphite/webapp" graphite-web
+RUN	apt-get -y install python-ldap python-cairo python-django python-twisted python-django-tagging python-simplejson python-memcache python-pysqlite2 python-support python-pip supervisor apache2 libapache2-mod-wsgi
+RUN	pip install whisper \
+    && pip install --install-option="--prefix=/var/lib/graphite" --install-option="--install-lib=/var/lib/graphite/lib" carbon \
+    && pip install --install-option="--prefix=/var/lib/graphite" --install-option="--install-lib=/var/lib/graphite/webapp" graphite-web
 
-# Add system service config
-add	./nginx.conf /etc/nginx/nginx.conf
-add	./supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN rm /etc/apache2/sites-enabled/*
+RUN a2enmod wsgi
 
-# Add graphite config
-add	./initial_data.json /var/lib/graphite/webapp/graphite/initial_data.json
-add	./local_settings.py /var/lib/graphite/webapp/graphite/local_settings.py
-add	./carbon.conf /var/lib/graphite/conf/carbon.conf
-add	./storage-schemas.conf /var/lib/graphite/conf/storage-schemas.conf
-run	mkdir -p /var/lib/graphite/storage/whisper
-run	touch /var/lib/graphite/storage/graphite.db /var/lib/graphite/storage/index
-run	chown -R www-data /var/lib/graphite/storage
-run	chmod 0775 /var/lib/graphite/storage /var/lib/graphite/storage/whisper
-run	chmod 0664 /var/lib/graphite/storage/graphite.db
-run	cd /var/lib/graphite/webapp/graphite && python manage.py syncdb --noinput
+ADD	./apache2.vhost.conf /etc/apache2/sites-enabled/graphite.conf
+ADD ./graphite.wsgi /var/lib/graphite/conf/graphite.wsgi
+ADD ./supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+ADD ./initial_data.json /var/lib/graphite/webapp/graphite/initial_data.json
+ADD ./local_settings.py /var/lib/graphite/webapp/graphite/local_settings.py
+ADD ./carbon.conf /var/lib/graphite/conf/carbon.conf
+ADD ./storage-schemas.conf /var/lib/graphite/conf/storage-schemas.conf
 
-# Nginx
-expose	:80
-# Carbon line receiver port
-expose	:2003
-# Carbon pickle receiver port
-expose	:2004
-# Carbon cache query port
-expose	:7002
+RUN mkdir -p /var/lib/graphite/storage/whisper
+RUN touch /var/lib/graphite/storage/graphite.db /var/lib/graphite/storage/index
+RUN chown -R www-data /var/lib/graphite/storage
+RUN chmod 0775 /var/lib/graphite/storage /var/lib/graphite/storage/whisper
+RUN chmod 0664 /var/lib/graphite/storage/graphite.db
+RUN cd /var/lib/graphite/webapp/graphite && python manage.py syncdb --noinput
 
-cmd	["/usr/bin/supervisord"]
+EXPOSE 80 2003 2004 7002
 
-# vim:ts=8:noet:
+CMD ["/usr/bin/supervisord"]
